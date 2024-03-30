@@ -1,0 +1,51 @@
+name: CI
+on:
+    push:
+        branches:
+            - coreaudio
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - name: Locate and collect headers
+        run: |
+          mkdir -p out
+
+          xcodebuild -version | tee out/xcode-version.txt
+          SDK="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDK path: $SDK" | tee -a out/xcode-version.txt
+
+          # $SDK itself is a symlink (e.g. MacOSX26.5.sdk -> MacOSX.sdk).
+          # find's default -P (physical) mode does not follow a symlink
+          # given as the search root itself -- it only stats that one
+          # symlink node and never descends, so every match silently
+          # comes up empty even though the tree underneath is completely
+          # fine (confirmed: plain `ls "$SDK/System/Library/Frameworks"`
+          # lists it just fine, since path components other than the
+          # final one are always resolved by the kernel regardless of
+          # find's own dereference policy). -L makes find follow it.
+          find -L "$SDK" \( -iname '*coreaudio*' -o -iname '*channellayout*' \) \
+            2>&1 | tee out/listing.txt | grep -i '\.h$' | sort -u > out/found-paths.txt
+
+          echo "---- all matches ----"
+          cat out/listing.txt
+          echo "---- header files only ----"
+          cat out/found-paths.txt
+
+          if [ ! -s out/found-paths.txt ]; then
+            echo "::error::No CoreAudioTypes.h/CoreAudioBaseTypes.h found under $SDK" >&2
+            exit 1
+          fi
+
+          mkdir -p out/headers
+          while IFS= read -r f; do
+            tag=$(echo "$f" | sed -e 's#/#_#g')
+            cp "$f" "out/headers/${tag}"
+          done < out/found-paths.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CoreAudioTypes-headers
+          path: out
+          retention-days: 14
