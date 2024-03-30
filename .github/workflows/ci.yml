@@ -10,6 +10,9 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3
+      - name: xcrun
+        run: |
+          xcrun --sdk macosx --show-sdk-path
       - name: Convert
         run: |
           afconvert -f caff -d opus 1ch.aif 1ch.opus.caf
