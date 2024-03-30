@@ -15,15 +15,14 @@ jobs:
           xcrun --sdk macosx --show-sdk-path
       - name: Convert
         run: |
-          afconvert -f caff -d opus 1ch.aif 1ch.opus.caf
-          afconvert -f caff -d opus 2ch.flac 2ch.opus.caf
-          afconvert -f caff -d flac 1ch.aif 1ch.flac.caf
-          afconvert -f caff -d 0 2ch.flac 2ch.flac.caf
-          afconvert -f caff -d 0 4ch.flac 4ch.flac.caf
-          afconvert -f caff -d 0 5ch.flac 5ch.flac.caf
-          afconvert -f caff -d 0 5.1ch.flac 5.1ch.flac.caf
-          afconvert -f caff -d 0 6.1ch.flac 6.1ch.flac.caf
-          afconvert -f caff -d 0 7.1ch.flac 7.1ch.flac.caf
+          afconvert -f caff -d BEI16 -l Mono 1ch.aif mono.caf
+          afconvert -f caff -d BEI16 -l AC3_1_0_1 1.1ch-FC-LF.wav 1.1ch_AC3_1_0_1.caf
+          afconvert -f caff -d BEI16 -l AC3_1_0_1 2.1ch-FL-FR-LF.wav 2.1ch_DVD_4.caf
+          afconvert -f caff -d BEI16 -l MPEG_3_0_A 3ch-L-C-R.aif 3ch_MPEG_3_0_A.caf
+          afconvert -f caff -d BEI16 -l AC3_3_0 3ch-L-C-R.aif 3ch_AC3_3_0.caf
+          afconvert -f caff -d BEI16 -l MPEG_3_0_B 3ch-L-C-R.aif 3ch_MPEG_3_0_B.caf
+          afconvert -f caff -d BEI16 -l ITU_2_1 3ch_FL-FR-BC.wav 3ch_ITU_2_1.caf
+
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
         with:
