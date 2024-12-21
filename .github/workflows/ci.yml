@@ -15,13 +15,7 @@ jobs:
           xcrun --sdk macosx --show-sdk-path
       - name: Convert
         run: |
-          afconvert -f caff -d BEI16 -l Mono 1ch.aif mono.caf
-          afconvert -f caff -d BEI16 -l AC3_1_0_1 1.1ch-FC-LF.wav 1.1ch_AC3_1_0_1.caf
-          afconvert -f caff -d BEI16 -l AC3_1_0_1 2.1ch-FL-FR-LF.wav 2.1ch_DVD_4.caf
-          afconvert -f caff -d BEI16 -l MPEG_3_0_A 3ch-L-C-R.aif 3ch_MPEG_3_0_A.caf
-          afconvert -f caff -d BEI16 -l AC3_3_0 3ch-L-C-R.aif 3ch_AC3_3_0.caf
-          afconvert -f caff -d BEI16 -l MPEG_3_0_B 3ch-L-C-R.aif 3ch_MPEG_3_0_B.caf
-          afconvert -f caff -d BEI16 -l ITU_2_1 3ch_FL-FR-BC.wav 3ch_ITU_2_1.caf
+          afconvert -f m4af -d aac -b 80000 -s 0 -q 96 Aeterna.flac Aeterna.m4a
 
       - name: Archive production artifacts
         uses: actions/upload-artifact@v4
@@ -29,3 +23,4 @@ jobs:
           name: dist-results
           path: |
             *.caf
+            *.m4a
