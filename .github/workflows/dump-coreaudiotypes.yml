@@ -1,0 +1,47 @@
+name: dump-coreaudiotypes
+
+on:
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: macos-latest
+    steps:
+      - name: Locate and collect headers
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          xcodebuild -version > out/xcode-version.txt
+          SDK="$(xcrun --sdk macosx --show-sdk-path)"
+          echo "SDK path: $SDK" >> out/xcode-version.txt
+
+          # Modern SDKs ship CoreAudioTypes as its own framework; older ones
+          # bundle it inside CoreAudio.framework. Also check the live OS
+          # frameworks dir (not just the SDK snapshot), since the runner is
+          # a real macOS install, not just headers-only.
+          {
+            find "$SDK" \
+              -ipath '*CoreAudioTypes.framework*' -o \
+              -ipath '*CoreAudio.framework*Headers*CoreAudioTypes.h' -o \
+              -ipath '*CoreAudio.framework*Headers*CoreAudioBaseTypes.h'
+            find /System/Library/Frameworks/CoreAudioTypes.framework \
+              /System/Library/Frameworks/CoreAudio.framework \
+              -iname 'CoreAudioTypes.h' -o -iname 'CoreAudioBaseTypes.h' \
+              2>/dev/null
+          } | grep -i '\.h$' | sort -u > out/found-paths.txt
+
+          cat out/found-paths.txt
+
+          while IFS= read -r f; do
+            # keep directory context (SDK vs live) in the copied filename
+            # so duplicates from both locations don't clobber each other
+            tag=$(echo "$f" | sed -e 's#/#_#g')
+            cp "$f" "out/${tag}"
+          done < out/found-paths.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CoreAudioTypes-headers
+          path: out
+          retention-days: 14
