@@ -15,11 +15,8 @@ set(CMAKE_C_STANDARD_REQUIRED OFF)
 include(CheckIncludeFile)
 include(CheckSymbolExists)
 include(CheckFunctionExists)
+include(CheckTypeSize)
 include(TestBigEndian)
-
-if(WIN32)
-    enable_language(RC)
-endif()
 
 # ---------------------------------------------------------------------------
 # libfdk-aac: either the system package (default, via pkg-config) or built
@@ -36,10 +33,10 @@ if(FDKAAC_BUILD_FDK_AAC)
     enable_language(CXX)
     include(ExternalProject)
 
-    set(FDKAAC_FDK_AAC_GIT_REPOSITORY "https://github.com/mstorsjo/fdk-aac.git"
+    set(FDKAAC_FDK_AAC_REPOSITORY "https://github.com/mstorsjo/fdk-aac"
         CACHE STRING "Git repository libfdk-aac is fetched from when FDKAAC_BUILD_FDK_AAC is ON")
-    set(FDKAAC_FDK_AAC_GIT_TAG "v2.0.3"
-        CACHE STRING "Git tag/branch/commit of libfdk-aac to build when FDKAAC_BUILD_FDK_AAC is ON")
+    set(FDKAAC_FDK_AAC_VERSION "v2.0.3"
+        CACHE STRING "Version of libfdk-aac to build when FDKAAC_BUILD_FDK_AAC is ON")
 
     set(FDK_AAC_PREFIX "${CMAKE_BINARY_DIR}/fdk-aac-install")
     set(FDK_AAC_INCLUDE_DIR "${FDK_AAC_PREFIX}/include")
@@ -52,11 +49,6 @@ if(FDKAAC_BUILD_FDK_AAC)
         set(FDK_AAC_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
     endif()
 
-    # -DCMAKE_INSTALL_LIBDIR=lib pins the install layout so FDK_AAC_LIBRARY
-    # above is right regardless of the target's usual GNUInstallDirs guess
-    # (e.g. lib64, lib/<triplet>). Toolchain/compiler settings are forwarded
-    # so the dependency is built with the same cross/native toolchain as
-    # fdkaac itself (relevant for the mingw-cross / msys2 / macOS builds).
     set(FDKAAC_FDK_AAC_CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${FDK_AAC_PREFIX}
         -DCMAKE_INSTALL_LIBDIR=lib
@@ -68,11 +60,38 @@ if(FDKAAC_BUILD_FDK_AAC)
     if(CMAKE_TOOLCHAIN_FILE)
         list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE})
     endif()
+    if(CMAKE_SYSTEM_NAME)
+        list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME})
+    endif()
+    if(CMAKE_SYSTEM_PROCESSOR)
+        list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_SYSTEM_PROCESSOR=${CMAKE_SYSTEM_PROCESSOR})
+    endif()
     if(CMAKE_C_COMPILER)
         list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER})
     endif()
     if(CMAKE_CXX_COMPILER)
         list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
+    endif()
+    if(CMAKE_C_COMPILER_ARG1)
+        list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_C_COMPILER_ARG1=${CMAKE_C_COMPILER_ARG1})
+    endif()
+    if(CMAKE_CXX_COMPILER_ARG1)
+        list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_CXX_COMPILER_ARG1=${CMAKE_CXX_COMPILER_ARG1})
+    endif()
+    if(CMAKE_C_COMPILER_TARGET)
+        list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_C_COMPILER_TARGET=${CMAKE_C_COMPILER_TARGET})
+    endif()
+    if(CMAKE_CXX_COMPILER_TARGET)
+        list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_CXX_COMPILER_TARGET=${CMAKE_CXX_COMPILER_TARGET})
+    endif()
+    if(CMAKE_LINKER)
+        list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_LINKER=${CMAKE_LINKER})
+    endif()
+    if(CMAKE_MT)
+        list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_MT=${CMAKE_MT})
+    endif()
+    if(CMAKE_RC_COMPILER)
+        list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_RC_COMPILER=${CMAKE_RC_COMPILER})
     endif()
     if(APPLE AND CMAKE_OSX_ARCHITECTURES)
         list(APPEND FDKAAC_FDK_AAC_CMAKE_ARGS -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES})
@@ -82,19 +101,14 @@ if(FDKAAC_BUILD_FDK_AAC)
     endif()
 
     ExternalProject_Add(fdk-aac-external
-        GIT_REPOSITORY   "${FDKAAC_FDK_AAC_GIT_REPOSITORY}"
-        GIT_TAG          "${FDKAAC_FDK_AAC_GIT_TAG}"
-        GIT_SHALLOW      TRUE
+        URL              "${FDKAAC_FDK_AAC_REPOSITORY}/archive/refs/tags/${FDKAAC_FDK_AAC_VERSION}.tar.gz"
         PREFIX           "${CMAKE_BINARY_DIR}/fdk-aac-external"
         CMAKE_ARGS       ${FDKAAC_FDK_AAC_CMAKE_ARGS}
         BUILD_BYPRODUCTS "${FDK_AAC_LIBRARY}"
         INSTALL_DIR      "${FDK_AAC_PREFIX}"
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     )
 
-    # Headers don't exist yet at configure time (ExternalProject builds at
-    # build time); target_include_directories just needs the path to exist
-    # once the compile step actually runs, which add_dependencies below
-    # guarantees.
     file(MAKE_DIRECTORY "${FDK_AAC_INCLUDE_DIR}")
 
     add_library(fdk-aac-static STATIC IMPORTED GLOBAL)
@@ -128,7 +142,9 @@ check_symbol_exists(getopt_long "getopt.h" HAVE_GETOPT_LONG)
 check_function_exists(fseeko    HAVE_FSEEKO)
 check_function_exists(fseeko64  HAVE_FSEEKO64)
 check_symbol_exists(_vscprintf  "stdio.h"   HAVE__VSCPRINTF)
-check_symbol_exists(__timeb64   "sys/timeb.h" HAVE_STRUCT___TIMEB64)
+set(CMAKE_EXTRA_INCLUDE_FILES "sys/timeb.h")
+check_type_size("struct __timeb64" STRUCT___TIMEB64)
+unset(CMAKE_EXTRA_INCLUDE_FILES)
 
 set(ICONV_LIBRARIES)
 if(NOT WIN32)
@@ -172,7 +188,10 @@ set(FDKAAC_SOURCES
 )
 
 if(WIN32)
-    list(APPEND FDKAAC_SOURCES src/compat_win32.c fdkaac.rc)
+    list(APPEND FDKAAC_SOURCES src/compat_win32.c fdkaac.manifest)
+    if (MINGW)
+        list(APPEND FDKAAC_SOURCES fdkaac.rc)
+    endif()
 else()
     list(APPEND FDKAAC_SOURCES src/compat_posix.c)
 endif()
@@ -195,8 +214,17 @@ target_compile_definitions(fdkaac PRIVATE HAVE_CONFIG_H)
 if(NOT WIN32)
     target_compile_definitions(fdkaac PRIVATE _FILE_OFFSET_BITS=64)
 endif()
+if(WIN32)
+    target_compile_definitions(fdkaac PRIVATE _CRT_SECURE_NO_DEPRECATE _CRT_NONSTDC_NO_DEPRECATE)
+    if(MSVC)
+        target_compile_definitions(fdkaac PRIVATE inline=_inline)
+    endif()
+endif()
 
-target_link_libraries(fdkaac PRIVATE ${FDK_AAC_LINK_TARGET} m ${ICONV_LIBRARIES})
+target_link_libraries(fdkaac PRIVATE ${FDK_AAC_LINK_TARGET} ${ICONV_LIBRARIES})
+if(NOT WIN32)
+    target_link_libraries(fdkaac PRIVATE m)
+endif()
 
 if(FDKAAC_BUILD_FDK_AAC)
     add_dependencies(fdkaac fdk-aac-external)
