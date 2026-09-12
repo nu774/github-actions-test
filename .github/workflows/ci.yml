@@ -3,73 +3,105 @@ on: [push, pull_request]
 
 jobs:
   linux:
-    strategy:
-      matrix:
-        version: [ latest ]
-    runs-on: ubuntu-${{ matrix.version }}
-    steps:
-      - name: Install libfdk-aac
-        run: |
-          sudo apt install libfdk-aac-dev
-      - name: Checkout sources
-        uses: actions/checkout@v3
-      - name: Build
-        run: |
-          autoreconf -fiv
-          ./configure
-          make -j2
-          sudo make install
-      - name: Test
-        run: |
-          fdkaac -b 128 -R -o /dev/null /dev/null
-
-  mingw-cross:
-    strategy:
-      matrix:
-        arch: [x86_64]
-        include:
-          - arch: x86_64
-            os: mingw64
     runs-on: ubuntu-latest
     steps:
-      - name: Install cross compiler
-        run: |
-          ARCH=${{ matrix.arch }}
-          sudo apt-get install g++-mingw-w64-${ARCH//_/-}
-      - name: Install libfdk-aac binary from repo.msys.org
-        run: |
-          wget https://repo.msys2.org/mingw/${{ matrix.os }}/${{ matrix.os }}.db.tar.zst
-          DESCFILE=$(tar xvf ${{ matrix.os }}.db.tar.zst --wildcards '*-fdk-aac*/desc')
-          PKGFILE=$(sed -n '/%FILENAME%/{n;p;q}' $DESCFILE)
-          wget https://repo.msys2.org/mingw/${{ matrix.os }}/${PKGFILE}
-          sudo tar xvf ${PKGFILE} -C /usr/${{ matrix.arch }}-w64-mingw32 --strip-component=1
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+      - name: Install libfdk-aac
+        run: sudo apt-get install libfdk-aac-dev
+      - name: Configure
+        run: cmake -B build -G Ninja .
       - name: Build
+        run: cmake --build build
+      - name: Smoke test
+        run: ./build/fdkaac -b 128 -R -o /dev/null /dev/null
+
+  windows-msvc:
+    strategy:
+      matrix:
+        arch: [x86, x64]
+    runs-on: windows-latest
+    env:
+      CC: cl
+      CXX: cl
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Visual Studio developer command prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch }}
+      - name: Configure
+        run: cmake -B build -G Ninja -DFDKAAC_BUILD_FDK_AAC=ON .
+      - name: Build
+        run: cmake --build build
+      - name: Smoke test
+        run: .\build\fdkaac.exe -b 128 -R -o NUL NUL
+
+  windows-clang:
+    strategy:
+      matrix:
+        arch:
+          - { short: "x86", long: "i686" }
+          - { short: "x64", long: "x86_64" }
+    runs-on: windows-latest
+    env:
+      CC: "clang-cl --target=${{ matrix.arch.long }}-pc-windows-msvc"
+      CXX: "clang-cl --target=${{ matrix.arch.long }}-pc-windows-msvc"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Visual Studio developer command prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.arch.short }}
+      - name: Configure
+        run: cmake -B build -G Ninja -DFDKAAC_BUILD_FDK_AAC=ON .
+      - name: Build
+        run: cmake --build build
+      - name: Smoke test
+        run: .\build\fdkaac.exe -b 128 -R -o NUL NUL
+
+  linux-clang-mingw:
+    strategy:
+      matrix:
+        arch:
+          - { short: "x86_64", triple: "x86_64-w64-mingw32" }
+    runs-on: ubuntu-latest
+    env:
+      # https://github.com/mstorsjo/llvm-mingw/releases
+      LLVM_MINGW_VERSION: "20260616"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install llvm-mingw
         run: |
-          autoreconf -fiv
-          PKG_CONFIG_LIBDIR=/usr/${{ matrix.arch }}-w64-mingw32/lib/pkgconfig ./configure --host=${{ matrix.arch }}-w64-mingw32 --prefix=/usr/${{ matrix.arch }}-w64-mingw32
-          make -j2
-          sudo make install
+          dir="llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64"
+          curl -fsSL -o llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${dir}.tar.xz"
+          tar xf llvm-mingw.tar.xz
+          echo "$PWD/$dir/bin" >> "$GITHUB_PATH"
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER=${{ matrix.arch.triple }}-clang \
+            -DCMAKE_CXX_COMPILER=${{ matrix.arch.triple }}-clang++ \
+            -DFDKAAC_BUILD_FDK_AAC=ON \
+            .
+      - name: Build
+        run: cmake --build build
 
   macos:
     runs-on: macos-latest
     steps:
-      - name: Install dependencies
-        run: |
-          brew install autoconf automake libtool pkg-config
-          brew install fdk-aac
-      - name: Checkout sources
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -G Ninja -DFDKAAC_BUILD_FDK_AAC=ON .
       - name: Build
-        run: |
-          autoreconf -fiv
-          ./configure
-          make -j3
-          sudo make install
-      - name: Test
-        run: |
-          fdkaac -b 128 -R -o /dev/null /dev/null
+        run: cmake --build build
+      - name: Smoke test
+        run: ./build/fdkaac -b 128 -R -o /dev/null /dev/null
 
   msys2:
     runs-on: windows-latest
@@ -87,21 +119,16 @@ jobs:
           update: true
           install: git
           pacboy: >-
-            autoconf:
-            automake:
-            libtool:
-            make:
+            cmake:p
+            ninja:p
             cc:p
             pkg-config:p
             fdk-aac:p
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -G Ninja .
       - name: Build
-        run: |
-          autoreconf -fiv
-          ./configure
-          make -j2
-          make install
-      - name: Test
-        run: |
-          fdkaac -b 128 -R -o /dev/null /dev/null
+        run: cmake --build build
+      - name: Smoke test
+        run: ./build/fdkaac.exe -b 128 -R -o /dev/null /dev/null
